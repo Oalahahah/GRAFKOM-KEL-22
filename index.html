@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SynthCity Map — Peta Daerah Sintetis 2D</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════ HEADER ══════════════════════════════════════ -->
+  <header class="app-header">
+    <div class="header-left">
+      <span class="logo-icon">⬡</span>
+      <div>
+        <h1 class="app-title">SYNTHCITY</h1>
+        <p class="app-subtitle">Peta Daerah Sintetis 2D · Vector Map Engine</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="stat-chip" id="stat-nodes">Nodes: —</div>
+      <div class="stat-chip" id="stat-edges">Edges: —</div>
+      <div class="stat-chip connected" id="stat-connected">Graph: Checking…</div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════ MAIN ═══════════════════════════════════════ -->
+  <main class="app-main">
+
+    <!-- Canvas Container -->
+    <div class="canvas-wrapper" id="canvasWrapper">
+      <canvas id="mapCanvas"></canvas>
+
+      <!-- Zoom Controls -->
+      <div class="zoom-controls">
+        <button class="zoom-btn" id="btnZoomIn"  title="Zoom In">＋</button>
+        <div class="zoom-label" id="zoomLabel">100%</div>
+        <button class="zoom-btn" id="btnZoomOut" title="Zoom Out">－</button>
+        <button class="zoom-btn reset" id="btnReset" title="Reset View">⌂</button>
+      </div>
+
+      <!-- Legend -->
+      <div class="legend">
+        <div class="legend-title">LEGENDA</div>
+        <div class="legend-item"><span class="dot intersection"></span>Persimpangan</div>
+        <div class="legend-item"><span class="dot highway"></span>Jalan Utama</div>
+        <div class="legend-item"><span class="dot street"></span>Jalan Kecil</div>
+        <div class="legend-item"><span class="dot building"></span>Bangunan</div>
+        <div class="legend-item"><span class="dot vehicle"></span>Kendaraan</div>
+      </div>
+
+      <!-- Mini tooltip -->
+      <div class="node-tooltip" id="nodeTooltip"></div>
+    </div>
+
+    <!-- ══════════════ SIDEBAR ══════════════ -->
+    <aside class="sidebar">
+
+      <section class="panel">
+        <h2 class="panel-title">⚙ KONFIGURASI</h2>
+        <label class="field-label">Jumlah Node
+          <input type="range" id="cfgNodes" min="12" max="60" value="30" />
+          <span class="field-val" id="cfgNodesVal">30</span>
+        </label>
+        <label class="field-label">Seed Acak
+          <input type="number" id="cfgSeed" value="42" min="1" max="9999" />
+        </label>
+        <button class="btn primary" id="btnGenerate">▶ Generate Peta</button>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">🔍 TRANSFORMASI VEKTOR</h2>
+        <label class="field-label">Scale Factor
+          <input type="range" id="cfgScale" min="0.3" max="5" step="0.05" value="1" />
+          <span class="field-val" id="cfgScaleVal">1.00×</span>
+        </label>
+        <label class="field-label">Translate X
+          <input type="range" id="cfgTx" min="-600" max="600" value="0" />
+          <span class="field-val" id="cfgTxVal">0 px</span>
+        </label>
+        <label class="field-label">Translate Y
+          <input type="range" id="cfgTy" min="-600" max="600" value="0" />
+          <span class="field-val" id="cfgTyVal">0 px</span>
+        </label>
+        <div class="matrix-display" id="matrixDisplay">
+          <div class="matrix-title">Matriks Transformasi T</div>
+          <pre id="matrixText">[ s  0  tx ]\n[ 0  s  ty ]\n[ 0  0   1 ]</pre>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">📊 ANALISIS GRAPH</h2>
+        <button class="btn secondary" id="btnBFS">▶ Jalankan BFS</button>
+        <button class="btn secondary" id="btnDFS">▶ Jalankan DFS</button>
+        <div class="log-box" id="logBox">
+          <p class="log-hint">← Klik Generate untuk mulai</p>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2 class="panel-title">🚗 ANIMASI</h2>
+        <button class="btn accent" id="btnToggleAnim">⏸ Pause Kendaraan</button>
+        <label class="field-label">Kecepatan Kendaraan
+          <input type="range" id="cfgSpeed" min="0.2" max="3" step="0.1" value="1" />
+          <span class="field-val" id="cfgSpeedVal">1.0×</span>
+        </label>
+      </section>
+
+    </aside>
+  </main>
+
+  <!-- ══════════════════════════ FOOTER ════════════════════════════ -->
+  <footer class="app-footer">
+    <span>Grafika Komputer · Native Canvas API · Transformasi Matriks Manual · Adjacency List · BFS/DFS Connectivity</span>
+  </footer>
+
+  <script src="map.js"></script>
+</body>
+</html>
