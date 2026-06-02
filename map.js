@@ -265,14 +265,14 @@ function generateCity(nodeCount, seed) {
       if (id === undefined) continue;
 
       // Horizontal
-      if (c + 1 < (gridIds[r]?.length ?? 0)) {
+          if (c + 1 < (gridIds[r]?.length ?? 0)) {
         const idR = gridIds[r][c + 1];
         if (idR !== undefined) {
-          const isCurved = rng.next() > 0.85; // Kurva lebih jarang
+          const isCurved = rng.next() > 0.1; // Sebagian besar jalan melengkung
           const na = graph.nodes.get(id), nb = graph.nodes.get(idR);
           const cp = isCurved ? {
-            x: (na.x + nb.x) / 2 + rng.range(-12, 12), // Offset lebih kecil
-            y: (na.y + nb.y) / 2 + rng.range(-18, 18),
+            x: (na.x + nb.x) / 2 + rng.range(-24, 24),
+            y: (na.y + nb.y) / 2 + rng.range(-28, 28),
           } : null;
           graph.addEdge(id, idR, isCurved, cp, r === 0 || r === ROWS - 1 ? 'highway' : 'main');
         }
@@ -281,75 +281,40 @@ function generateCity(nodeCount, seed) {
       // Vertikal
       if (r + 1 < ROWS && gridIds[r + 1]?.[c] !== undefined) {
         const idD = gridIds[r + 1][c];
-        const isCurved = rng.next() > 0.85;
+        const isCurved = rng.next() > 0.1;
         const na = graph.nodes.get(id), nb = graph.nodes.get(idD);
         const cp = isCurved ? {
-          x: (na.x + nb.x) / 2 + rng.range(-18, 18),
-          y: (na.y + nb.y) / 2 + rng.range(-12, 12),
+          x: (na.x + nb.x) / 2 + rng.range(-28, 28),
+          y: (na.y + nb.y) / 2 + rng.range(-18, 18),
         } : null;
         graph.addEdge(id, idD, isCurved, cp, c === 0 || c === COLS - 1 ? 'highway' : 'main');
       }
+
     }
   }
 
   /* ── 3C. Extra diagonal / shortcut edges ──────────── */
   const allIds = [...graph.nodes.keys()];
-  const extraCount = Math.floor(nodeCount * 0.25); // Lebih sedikit edge extra
+  const extraCount = Math.max(1, Math.floor(nodeCount * 0.08));
   for (let i = 0; i < extraCount; i++) {
     const a = allIds[rng.int(0, allIds.length - 1)];
     const b = allIds[rng.int(0, allIds.length - 1)];
     if (a === b) continue;
-    // Avoid duplicate edges
     const alreadyConnected = graph.adj.get(a).some(e => e.to === b);
     if (alreadyConnected) continue;
     const na = graph.nodes.get(a), nb = graph.nodes.get(b);
     const dist = Math.hypot(na.x - nb.x, na.y - nb.y);
     if (dist < 220 && dist > 40) {
-      const isCurved = rng.next() > 0.75; // Lebih jarang kurva
+      const isCurved = rng.next() > 0.35;
       const cp = isCurved ? {
-        x: (na.x + nb.x) / 2 + rng.range(-25, 25), // Offset lebih kecil
-        y: (na.y + nb.y) / 2 + rng.range(-25, 25),
+        x: (na.x + nb.x) / 2 + rng.range(-24, 24),
+        y: (na.y + nb.y) / 2 + rng.range(-24, 24),
       } : null;
       graph.addEdge(a, b, isCurved, cp, 'minor');
     }
   }
 
-  /* ── 3D. Bundaran (roundabout) node ───────────────── */
-  const roundaboutCount = Math.max(2, Math.floor(nodeCount / 12));
-  const rbNodes = [];
-  for (let i = 0; i < roundaboutCount; i++) {
-    const id = graph.addNode(
-      rng.range(MARGIN + 80, W - MARGIN - 80),
-      rng.range(MARGIN + 80, H - MARGIN - 80),
-      'roundabout',
-      `RB${i}`
-    );
-    rbNodes.push(id);
-  }
-  // Hubungkan bundaran ke 3-4 node terdekat (lebih sedikit dan lurus)
-  for (const rbId of rbNodes) {
-    const rb = graph.nodes.get(rbId);
-    const sorted = allIds
-      .filter(id => id !== rbId)
-      .map(id => ({ id, d: Math.hypot(graph.nodes.get(id).x - rb.x, graph.nodes.get(id).y - rb.y) }))
-      .sort((a, b) => a.d - b.d)
-      .slice(0, 3);
-
-    for (const { id } of sorted) {
-      const alreadyConnected = graph.adj.get(rbId).some(e => e.to === id);
-      if (alreadyConnected) continue;
-      const nb = graph.nodes.get(id);
-      // Sebagian besar lurus, minimal kurva
-      const isCurved = rng.next() > 0.8;
-      const cp = isCurved ? {
-        x: (rb.x + nb.x) / 2 + rng.range(-20, 20),
-        y: (rb.y + nb.y) / 2 + rng.range(-20, 20),
-      } : null;
-      graph.addEdge(rbId, id, isCurved, cp, 'main');
-    }
-  }
-
-  /* ── 3E. Pastikan connected ───────────────────────── */
+  /* ── 3D. Pastikan connected ───────────────────────── */
   graph.ensureConnected(rng);
 
   /* ── 3F. Generate Bangunan di antara blok ─────────── */
@@ -502,14 +467,14 @@ class Vehicle {
 /* ════════════════════════════════════════════════
    §6  RENDERER — semua gambar di Canvas
 ════════════════════════════════════════════════ */
-function renderMap(ctx, graph, buildings, vehicles, viewMatrix, highlightSet, W, H) {
+function renderMap(ctx, graph, buildings, vehicles, viewMatrix, highlightSet, W, H, route, traversalActive) {
   ctx.clearRect(0, 0, W, H);
 
   /* ── Latar ground ─────────────────────────────────── */
-  ctx.fillStyle = '#07090f';
+  ctx.fillStyle = '#2d7e25';
   ctx.fillRect(0, 0, W, H);
 
-  /* Kisi latar (grid kota) */
+  /* Kisi latar (tekstur rumput) */
   drawGrid(ctx, viewMatrix, W, H);
 
   /* ── Bangunan (di bawah jalan) ───────────────────── */
@@ -528,34 +493,29 @@ function renderMap(ctx, graph, buildings, vehicles, viewMatrix, highlightSet, W,
 
     // Konfigurasi visual per tipe lane
     const cfg = {
-      highway: { width: 6, color: '#c8d6ff', shadowBlur: 6, shadowColor: '#5572ff44' },
-      main:    { width: 3.5, color: '#8899cc', shadowBlur: 3, shadowColor: '#3355ff22' },
-      minor:   { width: 2, color: '#4a5a80', shadowBlur: 0, shadowColor: 'transparent' },
-    }[edge.laneType] ?? { width: 2, color: '#4a5a80', shadowBlur: 0 };
+      highway: { width: 8, color: '#4a4a4a', shadowBlur: 6, shadowColor: '#00000066' },
+      main:    { width: 6, color: '#5a5a5a', shadowBlur: 4, shadowColor: '#00000044' },
+      minor:   { width: 4, color: '#424242', shadowBlur: 0, shadowColor: 'transparent' },
+      route:   { width: 5, color: '#ffd54f', shadowBlur: 10, shadowColor: '#ffd54f88' },
+    }[edge.laneType] ?? { width: 4, color: '#424242', shadowBlur: 0, shadowColor: 'transparent' };
 
     ctx.save();
     
-    // Jika ada highlight (BFS/DFS), tampilkan path yang dilalui lebih terang
-    if (highlightSet.size > 0) {
-      if (highlightSet.has(edge.from) && highlightSet.has(edge.to)) {
-        // Edge yang ada dalam traversal path
-        ctx.strokeStyle = edge.laneType === 'highway' ? '#ffe066' : '#ffd700';
-        ctx.lineWidth = cfg.width + 2;
-        ctx.shadowBlur = 12;
-        ctx.shadowColor = '#ffe06688';
-        ctx.globalAlpha = 1;
-      } else {
-        // Edge yang tidak dalam path - dim
-        ctx.globalAlpha = 0.15;
-        ctx.strokeStyle = cfg.color;
-        ctx.lineWidth = cfg.width;
-        ctx.shadowBlur = 0;
-      }
+    // Hanya highlight edge ketika traversal masih berlangsung.
+    if (traversalActive && highlightSet.size > 0 && highlightSet.has(edge.from) && highlightSet.has(edge.to)) {
+      // Edge yang ada dalam traversal path
+      ctx.strokeStyle = edge.laneType === 'highway' ? '#ffe066' : '#ffd700';
+      ctx.lineWidth = cfg.width + 2;
+      ctx.shadowBlur = 12;
+      ctx.shadowColor = '#ffe06688';
+      ctx.globalAlpha = 1;
     } else {
+      // Edge biasa — tampilkan normal (tidak transparan)
       ctx.strokeStyle = cfg.color;
       ctx.lineWidth   = cfg.width;
       ctx.shadowBlur  = cfg.shadowBlur;
       ctx.shadowColor = cfg.shadowColor;
+      ctx.globalAlpha = 1;
     }
 
     ctx.lineCap = 'round';
@@ -570,13 +530,70 @@ function renderMap(ctx, graph, buildings, vehicles, viewMatrix, highlightSet, W,
       ctx.lineTo(pb.x, pb.y);
     }
     ctx.stroke();
+
+    if (edge.laneType !== 'route') {
+      ctx.save();
+      ctx.setLineDash([10, 8]);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 1.2;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      if (edge.curved && edge.cp) {
+        const pc = Mat3.applyPoint(viewMatrix, edge.cp.x, edge.cp.y);
+        ctx.moveTo(pa.x, pa.y);
+        ctx.quadraticCurveTo(pc.x, pc.y, pb.x, pb.y);
+      } else {
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  if (route && route.edges?.length) {
+    ctx.save();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#ffb300';
+    ctx.shadowBlur = 12;
+    ctx.shadowColor = '#ffb30088';
+    ctx.globalAlpha = 0.95;
+    ctx.lineCap = 'round';
+
+    for (const edge of route.edges) {
+      const na = graph.nodes.get(edge.from);
+      const nb = graph.nodes.get(edge.to);
+      if (!na || !nb) continue;
+      const pa = Mat3.applyPoint(viewMatrix, na.x, na.y);
+      const pb = Mat3.applyPoint(viewMatrix, nb.x, nb.y);
+      ctx.beginPath();
+      if (edge.curved && edge.cp) {
+        const pc = Mat3.applyPoint(viewMatrix, edge.cp.x, edge.cp.y);
+        ctx.moveTo(pa.x, pa.y);
+        ctx.quadraticCurveTo(pc.x, pc.y, pb.x, pb.y);
+      } else {
+        ctx.moveTo(pa.x, pa.y);
+        ctx.lineTo(pb.x, pb.y);
+      }
+      ctx.stroke();
+    }
     ctx.restore();
   }
 
   /* ── Nodes / Persimpangan ─────────────────────────── */
   for (const [, node] of graph.nodes) {
     const p = Mat3.applyPoint(viewMatrix, node.x, node.y);
-    drawNode(ctx, p.x, p.y, node.type, highlightSet.has(node.id), node.id);
+    const isStart = node.id === route?.startNodeId;
+    const isEnd   = node.id === route?.endNodeId;
+    drawNode(ctx, p.x, p.y, node.type, highlightSet.has(node.id) || isStart || isEnd, node.id);
+  }
+
+  if (route && route.startNodeId !== null) {
+    drawRouteMarker(ctx, graph.nodes.get(route.startNodeId), viewMatrix, '#00e676', 'A');
+  }
+  if (route && route.endNodeId !== null) {
+    drawRouteMarker(ctx, graph.nodes.get(route.endNodeId), viewMatrix, '#ff3d5a', 'B');
   }
 
   /* ── Kendaraan ────────────────────────────────────── */
@@ -585,13 +602,21 @@ function renderMap(ctx, graph, buildings, vehicles, viewMatrix, highlightSet, W,
     const p   = Mat3.applyPoint(viewMatrix, raw.x, raw.y);
     drawVehicle(ctx, p.x, p.y, raw.angle, v.type, v.color);
   }
+
+  if (route && route.vehicle) {
+    const raw = route.vehicle.position ?? getTrackVehiclePosition();
+    if (raw) {
+      const p   = Mat3.applyPoint(viewMatrix, raw.x, raw.y);
+      drawVehicle(ctx, p.x, p.y, raw.angle, route.vehicle.type, route.vehicle.color);
+    }
+  }
 }
 
 /* ── Gambar grid latar ─────────────────────────────── */
 function drawGrid(ctx, M, W, H) {
   const step = 50;
   ctx.save();
-  ctx.strokeStyle = '#12182e';
+  ctx.strokeStyle = '#3b8b32';
   ctx.lineWidth   = 1;
 
   for (let gx = -500; gx < 1400; gx += step) {
@@ -608,6 +633,28 @@ function drawGrid(ctx, M, W, H) {
 }
 
 /* ── Gambar node persimpangan / bundaran ──────────────── */
+function drawRouteMarker(ctx, node, M, color, label) {
+  if (!node) return;
+  const p = Mat3.applyPoint(M, node.x, node.y);
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = '#000000';
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(p.x, p.y - 14);
+  ctx.lineTo(p.x - 7, p.y + 4);
+  ctx.lineTo(p.x + 7, p.y + 4);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 10px Syne Mono';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(label, p.x, p.y - 6);
+  ctx.restore();
+}
+
 function drawNode(ctx, x, y, type, highlighted, nodeId) {
   ctx.save();
   if (type === 'roundabout') {
@@ -748,6 +795,11 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   let viewTy    = 0;
 
   let highlightSet  = new Set();
+  let startNodeId   = null;
+  let endNodeId     = null;
+  let routeNodes    = [];
+  let routeEdges    = [];
+  let trackState    = { active: false, paused: false, vehicle: null, hasStarted: false };
   let animRunning   = true;
   let vehicleSpeed  = 1.0;
   let animFrameId   = null;
@@ -757,6 +809,11 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   let traversalOrder = [];
   let traversalStep = 0;
   let traversalSpeed = 100; // ms per node
+  let traversalPrev = null;
+  let traversalTarget = null;
+  let traversalFound = false;
+  let traversalStart = null;
+  let traversalHighlightSet = new Set();
 
   /* ── UI Refs ──────────────────────────────────────── */
   const cfgNodes    = document.getElementById('cfgNodes');
@@ -774,6 +831,9 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   const matrixText  = document.getElementById('matrixText');
   const logBox      = document.getElementById('logBox');
   const nodeTooltip = document.getElementById('nodeTooltip');
+  const selStartNode = document.getElementById('selStartNode');
+  const selEndNode   = document.getElementById('selEndNode');
+  const btnFindRoute = document.getElementById('btnFindRoute');
   const statNodes   = document.getElementById('stat-nodes');
   const statEdges   = document.getElementById('stat-edges');
   const statConn    = document.getElementById('stat-connected');
@@ -801,6 +861,314 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     cfgTxVal.textContent = viewTx.toFixed(0) + ' px';
     cfgTy.value   = viewTy;
     cfgTyVal.textContent = viewTy.toFixed(0) + ' px';
+  }
+
+  function updateRouteInfo() {
+    const routeLabel = document.getElementById('routeInfo');
+    if (!routeNodes.length) {
+      routeLabel.textContent = 'Belum ada';
+      return;
+    }
+    const startLabel = graph.nodes.get(startNodeId)?.label ?? '—';
+    const endLabel   = graph.nodes.get(endNodeId)?.label ?? '—';
+    routeLabel.textContent = `${startLabel} → ${endLabel} (${routeNodes.length} node)`;
+  }
+
+  function pickRandomEndpoints() {
+    const ids = [...graph.nodes.keys()];
+    if (ids.length < 2) return;
+    const rng = rngRef ?? SeededRNG(Date.now());
+    startNodeId = ids[rng.int(0, ids.length - 1)];
+    endNodeId   = ids[rng.int(0, ids.length - 1)];
+    while (endNodeId === startNodeId) {
+      endNodeId = ids[rng.int(0, ids.length - 1)];
+    }
+    buildRoute(startNodeId, endNodeId);
+    populateEndpointSelectors();
+  }
+
+  function populateEndpointSelectors() {
+    if (!selStartNode || !selEndNode) return;
+    selStartNode.innerHTML = '';
+    selEndNode.innerHTML   = '';
+    const ids = [...graph.nodes.keys()];
+    for (const id of ids) {
+      const node = graph.nodes.get(id);
+      const label = node?.label ?? `N${id}`;
+      const text  = `${label} (${id})`;
+      const optionA = document.createElement('option');
+      optionA.value = id;
+      optionA.textContent = text;
+      selStartNode.appendChild(optionA);
+      const optionB = document.createElement('option');
+      optionB.value = id;
+      optionB.textContent = text;
+      selEndNode.appendChild(optionB);
+    }
+    if (ids.length >= 2) {
+      selStartNode.value = `${startNodeId ?? ids[0]}`;
+      selEndNode.value   = `${endNodeId ?? ids[1] ?? ids[0]}`;
+      if (selStartNode.value === selEndNode.value) {
+        selEndNode.value = `${ids.find(id => id !== Number(selStartNode.value)) ?? ids[0]}`;
+      }
+    }
+  }
+
+  function findRouteBetweenSelected() {
+    if (!graph.nodes.size) return;
+    const start = Number(selStartNode.value);
+    const end   = Number(selEndNode.value);
+    if (start === end) {
+      log('✗ Start dan end harus berbeda.', 'log-warn');
+      return;
+    }
+    const t0 = performance.now();
+    const path = findShortestPath(start, end);
+    const ms = (performance.now() - t0).toFixed(2);
+    if (!path.length) {
+      log(`✗ Tidak ada rute dari ${start} ke ${end}.`, 'log-warn');
+      return;
+    }
+    highlightSet = new Set(path);
+    routeNodes = path;
+    routeEdges = pathToEdges(path);
+    startNodeId = start;
+    endNodeId   = end;
+    updateRouteInfo();
+    clearLog();
+    log(`⊙ Rute terdekat: ${graph.nodes.get(start)?.label} → ${graph.nodes.get(end)?.label}`, 'log-ok');
+    log(`  Node dalam rute: ${path.length}`, 'log-ok');
+    log(`  Waktu komputasi: ${ms}ms`, 'log-ok');
+    drawFrame();
+  }
+
+  function findShortestPath(start, end) {
+    const distances = new Map();
+    const previous  = new Map();
+    const queue     = [];
+
+    for (const id of graph.nodes.keys()) {
+      distances.set(id, Infinity);
+    }
+    distances.set(start, 0);
+    queue.push({ id: start, cost: 0 });
+
+    while (queue.length) {
+      queue.sort((a, b) => a.cost - b.cost);
+      const { id: current, cost } = queue.shift();
+      if (current === end) break;
+      if (cost > distances.get(current)) continue;
+
+      for (const edge of graph.adj.get(current) || []) {
+        const nextCost = cost + edge.weight;
+        if (nextCost < distances.get(edge.to)) {
+          distances.set(edge.to, nextCost);
+          previous.set(edge.to, current);
+          queue.push({ id: edge.to, cost: nextCost });
+        }
+      }
+    }
+
+    if (!previous.has(end) && start !== end) return [];
+    const path = [end];
+    let cursor = end;
+    while (cursor !== start) {
+      cursor = previous.get(cursor);
+      if (cursor === undefined) return [];
+      path.unshift(cursor);
+    }
+    return path;
+  }
+
+  function buildRoute(start, end, useDFS = false) {
+    routeNodes = useDFS ? findDFSPath(start, end) : findShortestPath(start, end);
+    routeEdges = [];
+    for (let i = 0; i + 1 < routeNodes.length; i++) {
+      const from = routeNodes[i];
+      const to   = routeNodes[i + 1];
+      let edge   = graph.adj.get(from).find(e => e.to === to);
+      if (!edge) edge = graph.adj.get(to).find(e => e.to === from);
+      if (!edge) continue;
+      routeEdges.push({ from, to, curved: edge.curved, cp: edge.cp, laneType: 'route' });
+    }
+    updateRouteInfo();
+  }
+
+  function findDFSPath(start, end) {
+    const visited = new Set();
+    const stack = [{ id: start, path: [start] }];
+    while (stack.length) {
+      const { id, path } = stack.pop();
+      if (id === end) return path;
+      if (visited.has(id)) continue;
+      visited.add(id);
+      for (const edge of graph.adj.get(id) || []) {
+        if (!visited.has(edge.to)) {
+          stack.push({ id: edge.to, path: [...path, edge.to] });
+        }
+      }
+    }
+    return [];
+  }
+
+  // Rekam traversal BFS — kembalikan urutan kunjungan dan peta parent
+  function getBFSTraversal(start, end) {
+    const order = [];
+    const prev = new Map();
+    const visited = new Set([start]);
+    const q = [start];
+    while (q.length) {
+      const u = q.shift();
+      order.push(u);
+      if (u === end) break;
+      for (const edge of graph.adj.get(u) || []) {
+        if (!visited.has(edge.to)) {
+          visited.add(edge.to);
+          prev.set(edge.to, u);
+          q.push(edge.to);
+        }
+      }
+    }
+    return { order, prev };
+  }
+
+  // Rekam traversal DFS (iteratif) — urutan kunjungan dan parent
+  function getDFSTraversal(start, end) {
+    const order = [];
+    const prev = new Map();
+    const visited = new Set();
+    const stack = [start];
+    while (stack.length) {
+      const u = stack.pop();
+      if (visited.has(u)) continue;
+      visited.add(u);
+      order.push(u);
+      if (u === end) break;
+      for (const edge of (graph.adj.get(u) || []).slice().reverse()) {
+        if (!visited.has(edge.to)) {
+          prev.set(edge.to, u);
+          stack.push(edge.to);
+        }
+      }
+    }
+    return { order, prev };
+  }
+
+  function pathToEdges(path) {
+    const edges = [];
+    for (let i = 0; i + 1 < path.length; i++) {
+      const from = path[i];
+      const to   = path[i + 1];
+      let edge   = graph.adj.get(from).find(e => e.to === to);
+      if (!edge) edge = graph.adj.get(to).find(e => e.to === from);
+      if (!edge) continue;
+      edges.push({ from, to, curved: edge.curved, cp: edge.cp, laneType: 'route' });
+    }
+    return edges;
+  }
+
+  function createTrackVehicle() {
+    if (!routeEdges.length) return null;
+    return {
+      edgeIndex: 0,
+      t: 0,
+      speed: 0.003,
+      color: '#ff6b00',
+      type: 'car',
+    };
+  }
+
+  function getTrackVehiclePosition() {
+    if (!trackState.vehicle || !routeEdges.length) return null;
+    const current = routeEdges[Math.min(trackState.vehicle.edgeIndex, routeEdges.length - 1)];
+    const na = graph.nodes.get(current.from);
+    const nb = graph.nodes.get(current.to);
+    const tt = Math.min(trackState.vehicle.t, 1);
+    if (current.curved && current.cp) {
+      const cp = current.cp;
+      const x = (1 - tt) * (1 - tt) * na.x + 2 * (1 - tt) * tt * cp.x + tt * tt * nb.x;
+      const y = (1 - tt) * (1 - tt) * na.y + 2 * (1 - tt) * tt * cp.y + tt * tt * nb.y;
+      const dt = 0.01;
+      const t2 = Math.min(tt + dt, 1);
+      const x2 = (1 - t2) * (1 - t2) * na.x + 2 * (1 - t2) * t2 * cp.x + t2 * t2 * nb.x;
+      const y2 = (1 - t2) * (1 - t2) * na.y + 2 * (1 - t2) * t2 * cp.y + t2 * t2 * nb.y;
+      return { x, y, angle: Math.atan2(y2 - y, x2 - x) };
+    }
+    const x = na.x + tt * (nb.x - na.x);
+    const y = na.y + tt * (nb.y - na.y);
+    return { x, y, angle: Math.atan2(nb.y - na.y, nb.x - na.x) };
+  }
+
+  function updateTrackAnimation() {
+    if (!trackState.active || trackState.paused || !trackState.vehicle || !routeEdges.length) return;
+    const v = trackState.vehicle;
+    v.t += v.speed * vehicleSpeed;
+    if (v.t >= 1) {
+      v.t = 0;
+      v.edgeIndex += 1;
+      if (v.edgeIndex >= routeEdges.length) {
+        v.edgeIndex = routeEdges.length - 1;
+        v.t = 1;
+        trackState.active = false;
+        log(`✓ Track selesai dari ${graph.nodes.get(startNodeId)?.label} ke ${graph.nodes.get(endNodeId)?.label}`, 'log-ok');
+      }
+    }
+    const pos = getTrackVehiclePosition();
+    if (pos) trackState.vehicle.position = pos;
+  }
+
+  function updateTrackButton() {
+    const btn = document.getElementById('btnStartTrack');
+    if (!trackState.hasStarted) {
+      btn.textContent = '▶ Start Track';
+    } else if (trackState.active && !trackState.paused) {
+      btn.textContent = '⏸ Pause Track';
+    } else if (trackState.paused) {
+      btn.textContent = '▶ Lanjutkan Track';
+    } else {
+      btn.textContent = '▶ Mulai Lagi';
+    }
+  }
+
+  function startTrack() {
+    if (!routeEdges.length) return;
+    if (!trackState.vehicle) trackState.vehicle = createTrackVehicle();
+    trackState.vehicle.position = getTrackVehiclePosition();
+    trackState.active = true;
+    trackState.paused = false;
+    trackState.hasStarted = true;
+    updateTrackButton();
+    if (!animFrameId) animFrameId = requestAnimationFrame(animLoop);
+  }
+
+  function toggleTrack() {
+    if (!routeNodes.length) {
+      log('Silakan pilih posisi start/tujuan terlebih dahulu.', 'log-warn');
+      return;
+    }
+    if (!trackState.hasStarted) {
+      startTrack();
+      log(`▶ Track dimulai: ${graph.nodes.get(startNodeId)?.label} → ${graph.nodes.get(endNodeId)?.label}`, 'log-ok');
+      return;
+    }
+    if (trackState.active && !trackState.paused) {
+      trackState.paused = true;
+      updateTrackButton();
+      log('▮▮ Track dipause.', 'log-warn');
+    } else {
+      trackState.paused = false;
+      updateTrackButton();
+      log('▶ Track dilanjutkan.', 'log-ok');
+      if (!animFrameId) animFrameId = requestAnimationFrame(animLoop);
+    }
+  }
+
+  function randomizePositions() {
+    if (!graph.nodes.size) return;
+    pickRandomEndpoints();
+    trackState = { active: false, paused: false, vehicle: null, hasStarted: false };
+    updateTrackButton();
+    log(`↻ Posisi acak: ${graph.nodes.get(startNodeId)?.label} → ${graph.nodes.get(endNodeId)?.label}`, 'log-ok');
   }
 
   /* ── Log helper ───────────────────────────────────── */
@@ -845,6 +1213,8 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     traversalAnimating = false;
     traversalStep = 0;
     traversalOrder = [];
+    pickRandomEndpoints();
+    updateTrackButton();
     updateMatrixDisplay();
 
     clearLog();
@@ -852,6 +1222,7 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     log(`  Seed: ${seed} | Kendaraan: ${vehicles.length}`, 'log-ok');
     log(`  Konektivitas: ${connected ? 'FULLY CONNECTED ✓' : 'DISCONNECTED ✗'}`,
         connected ? 'log-ok' : 'log-warn');
+    log(`  Posisi start/tujuan: ${graph.nodes.get(startNodeId)?.label} → ${graph.nodes.get(endNodeId)?.label}`, 'log-ok');
 
     requestRender();
   }
@@ -862,55 +1233,51 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   function runBFS() {
     if (!graph.nodes.size) return;
     clearLog();
-    const startId = graph.nodes.keys().next().value;
-    const t0 = performance.now();
-    const { visited, order } = graph.bfs(startId);
-    const ms = (performance.now() - t0).toFixed(2);
+    const ids = [...graph.nodes.keys()];
+    const startId = Number(selStartNode?.value ?? ids[0]);
+    const endId   = Number(selEndNode?.value ?? ids[ids.length - 1]);
+    if (startId === endId) { log('✗ Start dan End harus berbeda.', 'log-warn'); return; }
 
-    log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'log-bfs');
-    log(`⊙ BREADTH-FIRST SEARCH (BFS)`, 'log-bfs');
-    log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'log-bfs');
-    log(`🔴 Mulai dari: Node #${startId}`, 'log-bfs');
-    log(`📊 Algoritma: QUEUE (FIFO) - menjelajahi per LEVEL`, 'log-bfs');
-    log(`🎬 Menganimasikan...`, 'log-bfs');
-    log(`  Waktu komputasi: ${ms}ms`, 'log-bfs');
-
-    // Start traversal animation
-    traversalAnimating = true;
+    // Siapkan animasi traversal BFS
+    const { order, prev } = getBFSTraversal(startId, endId);
     traversalOrder = order;
+    traversalPrev  = prev;
+    traversalStart = startId;
+    traversalTarget = endId;
     traversalStep = 0;
+    traversalFound = false;
     highlightSet.clear();
-    
-    // Ensure animation loop is running
+    traversalHighlightSet.clear();
+    routeNodes = [];
+    routeEdges = [];
+    traversalAnimating = true;
+    log(`▶ BFS: mulai dari ${graph.nodes.get(startId)?.label} ke ${graph.nodes.get(endId)?.label}`, 'log-bfs');
     if (!animFrameId) animFrameId = requestAnimationFrame(animLoop);
-    requestRender();
   }
 
   function runDFS() {
     if (!graph.nodes.size) return;
     clearLog();
-    const startId = graph.nodes.keys().next().value;
-    const t0 = performance.now();
-    const { visited, order } = graph.dfs(startId);
-    const ms = (performance.now() - t0).toFixed(2);
+    const ids = [...graph.nodes.keys()];
+    const startId = Number(selStartNode?.value ?? ids[0]);
+    const endId   = Number(selEndNode?.value ?? ids[ids.length - 1]);
+    if (startId === endId) { log('✗ Start dan End harus berbeda.', 'log-warn'); return; }
 
-    log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'log-dfs');
-    log(`⊙ DEPTH-FIRST SEARCH (DFS)`, 'log-dfs');
-    log(`━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`, 'log-dfs');
-    log(`🔴 Mulai dari: Node #${startId}`, 'log-dfs');
-    log(`📊 Algoritma: STACK (LIFO) - menjelajahi DALAM SEBELUM LUAS`, 'log-dfs');
-    log(`🎬 Menganimasikan...`, 'log-dfs');
-    log(`  Waktu komputasi: ${ms}ms`, 'log-dfs');
-
-    // Start traversal animation
-    traversalAnimating = true;
+    // Siapkan animasi traversal DFS
+    const { order, prev } = getDFSTraversal(startId, endId);
     traversalOrder = order;
+    traversalPrev  = prev;
+    traversalStart = startId;
+    traversalTarget = endId;
     traversalStep = 0;
+    traversalFound = false;
     highlightSet.clear();
-    
-    // Ensure animation loop is running
+    traversalHighlightSet.clear();
+    routeNodes = [];
+    routeEdges = [];
+    traversalAnimating = true;
+    log(`▶ DFS: mulai dari ${graph.nodes.get(startId)?.label} ke ${graph.nodes.get(endId)?.label}`, 'log-dfs');
     if (!animFrameId) animFrameId = requestAnimationFrame(animLoop);
-    requestRender();
   }
 
   /* ══════════════════════════════════════════════════
@@ -928,10 +1295,31 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     
     if (traversalStep < traversalOrder.length) {
       const nodeId = traversalOrder[traversalStep];
-      highlightSet.add(nodeId);
+      traversalHighlightSet.add(nodeId);
       traversalStep++;
+
+      // Jika ini node target, hentikan dan bangun rute dari prev map
+      if (traversalTarget !== null && nodeId === traversalTarget) {
+        traversalAnimating = false;
+        traversalFound = true;
+        const path = findShortestPath(traversalStart, traversalTarget);
+        if (path.length) {
+          routeNodes = path;
+          routeEdges = pathToEdges(path);
+          startNodeId = traversalStart;
+          endNodeId = traversalTarget;
+          updateRouteInfo();
+          highlightSet = new Set(routeNodes);
+          traversalHighlightSet.clear();
+          clearLog();
+          log(`✓ Rute terpendek ditemukan: ${graph.nodes.get(startNodeId)?.label} → ${graph.nodes.get(endNodeId)?.label}`, 'log-ok');
+          log(`  Node dalam rute: ${routeNodes.length}`, 'log-ok');
+        } else {
+          log('✗ Gagal membangun rute terpendek setelah pencarian.', 'log-warn');
+        }
+      }
     } else {
-      // Animasi selesai
+      // Animasi traversal selesai tanpa menemukan target
       traversalAnimating = false;
       const visited = highlightSet.size;
       const total = graph.nodes.size;
@@ -941,17 +1329,23 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   }
 
   function requestRender() {
-    if (animRunning) return; // sudah ada loop
+    if (animRunning || traversalAnimating || trackState.active) return; // sudah ada loop berjalan
     drawFrame();
   }
 
   function drawFrame() {
     const M = getViewMatrix();
-    renderMap(ctx, graph, buildings, vehicles, M, highlightSet, canvas.width, canvas.height);
+    const activeHighlight = traversalAnimating ? traversalHighlightSet : highlightSet;
+    renderMap(ctx, graph, buildings, vehicles, M, activeHighlight, canvas.width, canvas.height, {
+      edges: routeEdges,
+      startNodeId,
+      endNodeId,
+      vehicle: trackState.vehicle,
+    }, traversalAnimating);
   }
 
   function animLoop() {
-    if (!animRunning && !traversalAnimating) { animFrameId = null; return; }
+    if (!animRunning && !traversalAnimating && !trackState.active) { animFrameId = null; return; }
     
     const now = performance.now();
     
@@ -964,6 +1358,9 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     if (traversalAnimating) {
       updateTraversalAnimation(now);
     }
+
+    // Update route track animation
+    updateTrackAnimation();
     
     drawFrame();
     animFrameId = requestAnimationFrame(animLoop);
@@ -1109,6 +1506,9 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   document.getElementById('btnGenerate').addEventListener('click', generate);
   document.getElementById('btnBFS').addEventListener('click', runBFS);
   document.getElementById('btnDFS').addEventListener('click', runDFS);
+  btnFindRoute.addEventListener('click', findRouteBetweenSelected);
+  document.getElementById('btnRandomizePos').addEventListener('click', () => { randomizePositions(); drawFrame(); });
+  document.getElementById('btnStartTrack').addEventListener('click', toggleTrack);
 
   document.getElementById('btnZoomIn').addEventListener('click', () => {
     applyZoom(1.25, canvas.width / 2, canvas.height / 2);
@@ -1124,6 +1524,9 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     traversalAnimating = false;
     traversalStep = 0;
     traversalOrder = [];
+    trackState.active = false;
+    trackState.paused = false;
+    updateTrackButton();
     updateMatrixDisplay();
     drawFrame();
   });
