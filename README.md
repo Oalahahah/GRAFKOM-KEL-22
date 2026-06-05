@@ -2,7 +2,7 @@
 Project akhir tugas kuliah Grafika komputer
 Anggota: 
 1. Sholahudin Putra Akbar (2401020137) @Oalahahah
-2. Jova Rifana (2401020050)
+2. Jova Rifana (2401020050) @jovarifana
 3. Irfan Kurniawan (2401020055) @irpan-k
 4. M. Afdhal Habibi (2401020083) @Afdhal-Habibi
 
