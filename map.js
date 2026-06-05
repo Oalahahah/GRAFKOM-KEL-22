@@ -596,13 +596,7 @@ function renderMap(ctx, graph, buildings, vehicles, viewMatrix, highlightSet, W,
     drawRouteMarker(ctx, graph.nodes.get(route.endNodeId), viewMatrix, '#ff3d5a', 'B');
   }
 
-  /* ── Kendaraan ────────────────────────────────────── */
-  for (const v of vehicles) {
-    const raw = v.getPosition();
-    const p   = Mat3.applyPoint(viewMatrix, raw.x, raw.y);
-    drawVehicle(ctx, p.x, p.y, raw.angle, v.type, v.color);
-  }
-
+  /* ── Kendaraan (hanya track vehicle) ────────────────────────────────── */
   if (route && route.vehicle) {
     const raw = route.vehicle.position ?? getTrackVehiclePosition();
     if (raw) {
@@ -800,7 +794,6 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   let routeNodes    = [];
   let routeEdges    = [];
   let trackState    = { active: false, paused: false, vehicle: null, hasStarted: false };
-  let animRunning   = true;
   let vehicleSpeed  = 1.0;
   let animFrameId   = null;
 
@@ -831,9 +824,6 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   const matrixText  = document.getElementById('matrixText');
   const logBox      = document.getElementById('logBox');
   const nodeTooltip = document.getElementById('nodeTooltip');
-  const selStartNode = document.getElementById('selStartNode');
-  const selEndNode   = document.getElementById('selEndNode');
-  const btnFindRoute = document.getElementById('btnFindRoute');
   const statNodes   = document.getElementById('stat-nodes');
   const statEdges   = document.getElementById('stat-edges');
   const statConn    = document.getElementById('stat-connected');
@@ -884,62 +874,6 @@ function drawVehicle(ctx, x, y, angle, type, color) {
       endNodeId = ids[rng.int(0, ids.length - 1)];
     }
     buildRoute(startNodeId, endNodeId);
-    populateEndpointSelectors();
-  }
-
-  function populateEndpointSelectors() {
-    if (!selStartNode || !selEndNode) return;
-    selStartNode.innerHTML = '';
-    selEndNode.innerHTML   = '';
-    const ids = [...graph.nodes.keys()];
-    for (const id of ids) {
-      const node = graph.nodes.get(id);
-      const label = node?.label ?? `N${id}`;
-      const text  = `${label} (${id})`;
-      const optionA = document.createElement('option');
-      optionA.value = id;
-      optionA.textContent = text;
-      selStartNode.appendChild(optionA);
-      const optionB = document.createElement('option');
-      optionB.value = id;
-      optionB.textContent = text;
-      selEndNode.appendChild(optionB);
-    }
-    if (ids.length >= 2) {
-      selStartNode.value = `${startNodeId ?? ids[0]}`;
-      selEndNode.value   = `${endNodeId ?? ids[1] ?? ids[0]}`;
-      if (selStartNode.value === selEndNode.value) {
-        selEndNode.value = `${ids.find(id => id !== Number(selStartNode.value)) ?? ids[0]}`;
-      }
-    }
-  }
-
-  function findRouteBetweenSelected() {
-    if (!graph.nodes.size) return;
-    const start = Number(selStartNode.value);
-    const end   = Number(selEndNode.value);
-    if (start === end) {
-      log('✗ Start dan end harus berbeda.', 'log-warn');
-      return;
-    }
-    const t0 = performance.now();
-    const path = findShortestPath(start, end);
-    const ms = (performance.now() - t0).toFixed(2);
-    if (!path.length) {
-      log(`✗ Tidak ada rute dari ${start} ke ${end}.`, 'log-warn');
-      return;
-    }
-    highlightSet = new Set(path);
-    routeNodes = path;
-    routeEdges = pathToEdges(path);
-    startNodeId = start;
-    endNodeId   = end;
-    updateRouteInfo();
-    clearLog();
-    log(`⊙ Rute terdekat: ${graph.nodes.get(start)?.label} → ${graph.nodes.get(end)?.label}`, 'log-ok');
-    log(`  Node dalam rute: ${path.length}`, 'log-ok');
-    log(`  Waktu komputasi: ${ms}ms`, 'log-ok');
-    drawFrame();
   }
 
   function findShortestPath(start, end) {
@@ -1020,7 +954,7 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     while (q.length) {
       const u = q.shift();
       order.push(u);
-      if (u === end) break;
+      // Scan ALL edges dari node u
       for (const edge of graph.adj.get(u) || []) {
         if (!visited.has(edge.to)) {
           visited.add(edge.to);
@@ -1043,7 +977,7 @@ function drawVehicle(ctx, x, y, angle, type, color) {
       if (visited.has(u)) continue;
       visited.add(u);
       order.push(u);
-      if (u === end) break;
+      // Scan ALL edges dari node u
       for (const edge of (graph.adj.get(u) || []).slice().reverse()) {
         if (!visited.has(edge.to)) {
           prev.set(edge.to, u);
@@ -1193,13 +1127,6 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     buildings       = result.buildings;
     rngRef          = result.rng;
 
-    // Generate kendaraan
-    vehicles = [];
-    const vCount = Math.max(8, Math.floor(nodeCount * 0.8));
-    for (let i = 0; i < vCount; i++) {
-      vehicles.push(new Vehicle(graph, SeededRNG(seed + i * 7)));
-    }
-
     // Stats
     statNodes.textContent = `Nodes: ${graph.nodes.size}`;
     statEdges.textContent = `Edges: ${graph.edges.length}`;
@@ -1219,12 +1146,23 @@ function drawVehicle(ctx, x, y, angle, type, color) {
 
     clearLog();
     log(`✓ Graph digenerate: ${graph.nodes.size} node, ${graph.edges.length} edge`, 'log-ok');
-    log(`  Seed: ${seed} | Kendaraan: ${vehicles.length}`, 'log-ok');
+    log(`  Seed: ${seed}`, 'log-ok');
     log(`  Konektivitas: ${connected ? 'FULLY CONNECTED ✓' : 'DISCONNECTED ✗'}`,
         connected ? 'log-ok' : 'log-warn');
-    log(`  Posisi start/tujuan: ${graph.nodes.get(startNodeId)?.label} → ${graph.nodes.get(endNodeId)?.label}`, 'log-ok');
+    log(`  Rute start/tujuan: ${graph.nodes.get(startNodeId)?.label} → ${graph.nodes.get(endNodeId)?.label}`, 'log-ok');
 
     requestRender();
+  }
+
+  /* ══════════════════════════════════════════════════
+     RANDOMIZE PETA (dengan seed baru)
+  ══════════════════════════════════════════════════ */
+  function randomizeMap() {
+    // Generate peta baru dengan node count yang sama tapi seed acak
+    const nodeCount = parseInt(cfgNodes.value);
+    const newSeed = Math.floor(Math.random() * 9999) + 1;
+    cfgSeed.value = newSeed;
+    generate();
   }
 
   /* ══════════════════════════════════════════════════
@@ -1234,9 +1172,9 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     if (!graph.nodes.size) return;
     clearLog();
     const ids = [...graph.nodes.keys()];
-    const startId = Number(selStartNode?.value ?? ids[0]);
-    const endId   = Number(selEndNode?.value ?? ids[ids.length - 1]);
-    if (startId === endId) { log('✗ Start dan End harus berbeda.', 'log-warn'); return; }
+    if (ids.length < 2) { log('✗ Perlu minimal 2 node.', 'log-warn'); return; }
+    const startId = startNodeId ?? ids[0];
+    const endId   = endNodeId ?? ids[ids.length - 1];
 
     // Siapkan animasi traversal BFS
     const { order, prev } = getBFSTraversal(startId, endId);
@@ -1259,9 +1197,9 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     if (!graph.nodes.size) return;
     clearLog();
     const ids = [...graph.nodes.keys()];
-    const startId = Number(selStartNode?.value ?? ids[0]);
-    const endId   = Number(selEndNode?.value ?? ids[ids.length - 1]);
-    if (startId === endId) { log('✗ Start dan End harus berbeda.', 'log-warn'); return; }
+    if (ids.length < 2) { log('✗ Perlu minimal 2 node.', 'log-warn'); return; }
+    const startId = startNodeId ?? ids[0];
+    const endId   = endNodeId ?? ids[ids.length - 1];
 
     // Siapkan animasi traversal DFS
     const { order, prev } = getDFSTraversal(startId, endId);
@@ -1297,46 +1235,38 @@ function drawVehicle(ctx, x, y, angle, type, color) {
       const nodeId = traversalOrder[traversalStep];
       traversalHighlightSet.add(nodeId);
       traversalStep++;
-
-      // Jika ini node target, hentikan dan bangun rute dari prev map
-      if (traversalTarget !== null && nodeId === traversalTarget) {
-        traversalAnimating = false;
-        traversalFound = true;
+    } else {
+      // Animasi traversal selesai — semua nodes dikunjungi
+      traversalAnimating = false;
+      const visited = traversalHighlightSet.size;
+      const total = graph.nodes.size;
+      clearLog();
+      log(`✓ Traversal Selesai!`, 'log-ok');
+      log(`  Node dikunjungi: ${visited} dari ${total}`, 'log-ok');
+      
+      // Jika end node ditemukan dalam traversal, bangun rute ke sana
+      if (traversalTarget !== null && traversalHighlightSet.has(traversalTarget)) {
         const path = findShortestPath(traversalStart, traversalTarget);
         if (path.length) {
           routeNodes = path;
           routeEdges = pathToEdges(path);
-          startNodeId = traversalStart;
-          endNodeId = traversalTarget;
-          updateRouteInfo();
           highlightSet = new Set(routeNodes);
-          traversalHighlightSet.clear();
-          clearLog();
-          log(`✓ Rute terpendek ditemukan: ${graph.nodes.get(startNodeId)?.label} → ${graph.nodes.get(endNodeId)?.label}`, 'log-ok');
+          log(`  Rute ke target: ${graph.nodes.get(traversalStart)?.label} → ${graph.nodes.get(traversalTarget)?.label}`, 'log-ok');
           log(`  Node dalam rute: ${routeNodes.length}`, 'log-ok');
-        } else {
-          log('✗ Gagal membangun rute terpendek setelah pencarian.', 'log-warn');
         }
       }
-    } else {
-      // Animasi traversal selesai tanpa menemukan target
-      traversalAnimating = false;
-      const visited = highlightSet.size;
-      const total = graph.nodes.size;
-      log(``, '');
-      log(`✓ Traversal selesai! ${visited}/${total} node dikunjungi.`, 'log-ok');
     }
   }
 
   function requestRender() {
-    if (animRunning || traversalAnimating || trackState.active) return; // sudah ada loop berjalan
+    if (traversalAnimating || trackState.active) return; // sudah ada loop berjalan
     drawFrame();
   }
 
   function drawFrame() {
     const M = getViewMatrix();
     const activeHighlight = traversalAnimating ? traversalHighlightSet : highlightSet;
-    renderMap(ctx, graph, buildings, vehicles, M, activeHighlight, canvas.width, canvas.height, {
+    renderMap(ctx, graph, buildings, [], M, activeHighlight, canvas.width, canvas.height, {
       edges: routeEdges,
       startNodeId,
       endNodeId,
@@ -1345,14 +1275,9 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   }
 
   function animLoop() {
-    if (!animRunning && !traversalAnimating && !trackState.active) { animFrameId = null; return; }
+    if (!traversalAnimating && !trackState.active) { animFrameId = null; return; }
     
     const now = performance.now();
-    
-    // Update vehicles
-    if (animRunning) {
-      for (const v of vehicles) v.update(vehicleSpeed);
-    }
     
     // Update traversal animation
     if (traversalAnimating) {
@@ -1367,13 +1292,7 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   }
 
   function startAnim() {
-    animRunning = true;
     if (!animFrameId) animFrameId = requestAnimationFrame(animLoop);
-  }
-
-  function stopAnim() {
-    animRunning = false;
-    drawFrame();
   }
 
   /* ══════════════════════════════════════════════════
@@ -1504,9 +1423,9 @@ function drawVehicle(ctx, x, y, angle, type, color) {
   });
 
   document.getElementById('btnGenerate').addEventListener('click', generate);
+  document.getElementById('btnRandomizeMap').addEventListener('click', randomizeMap);
   document.getElementById('btnBFS').addEventListener('click', runBFS);
   document.getElementById('btnDFS').addEventListener('click', runDFS);
-  btnFindRoute.addEventListener('click', findRouteBetweenSelected);
   document.getElementById('btnRandomizePos').addEventListener('click', () => { randomizePositions(); drawFrame(); });
   document.getElementById('btnStartTrack').addEventListener('click', toggleTrack);
 
@@ -1531,19 +1450,8 @@ function drawVehicle(ctx, x, y, angle, type, color) {
     drawFrame();
   });
 
-  document.getElementById('btnToggleAnim').addEventListener('click', function () {
-    if (animRunning) {
-      stopAnim();
-      this.textContent = '▶ Resume Kendaraan';
-    } else {
-      startAnim();
-      this.textContent = '⏸ Pause Kendaraan';
-    }
-  });
-
   /* ── Init ─────────────────────────────────────────── */
   generate();
-  startAnim();
   updateMatrixDisplay();
 
 })();
